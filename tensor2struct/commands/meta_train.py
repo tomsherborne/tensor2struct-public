@@ -5,6 +5,7 @@ import json
 import os
 import logging
 import itertools
+import time 
 
 import _jsonnet
 import attr
@@ -16,7 +17,7 @@ from tensor2struct.commands import train
 from tensor2struct.training import maml
 from tensor2struct.utils import registry, random_state, vocab
 from tensor2struct.utils import saver as saver_mod
-
+from tensor2struct.utils import helper
 
 @attr.s
 class MetaTrainConfig(train.TrainConfig):
@@ -135,12 +136,16 @@ class MetaTrainer(train.Trainer):
         train_data_scheduler = self.load_train_data()
         train_eval_data_loader, val_data_loader = self.load_eval_data()
 
+        n_step_start_time = time.time()
+        report_duration_every_n = 200
+
         # 5. Start training loop
         with self.data_random:
             while last_step < self.train_config.max_steps:
                 self.eval_model(last_step, train_eval_data_loader, val_data_loader)
 
                 try:
+                    self.logger.info(f"Running step {last_step}")
                     self.step(
                         config,
                         train_data_scheduler,
@@ -151,10 +156,21 @@ class MetaTrainer(train.Trainer):
                     )
                     last_step += 1
                     self.save_state(saver, modeldir, last_step)
+
+                    if last_step % 10==0: # Periodically check GPU usage
+                        for gpu, memory in helper.peak_gpu_memory().items():
+                            self.logger.info(f"GPU {gpu} memory usage update: {helper.format_size(memory)}")
+                            torch.cuda.empty_cache()
+
+                    if (last_step + 1) % report_duration_every_n == 0:
+                        duration = datetime.timedelta(seconds=(time.time() - n_step_start_time))
+                        self.logger.info("%i steps duration: %s", report_duration_every_n, duration)
+                        n_step_start_time = time.time()
                 except RuntimeError as e:
                     # it seems to work for meta-train
                     err_msg = str(e)
                     self.logger.warn(f"Step Failed {err_msg}")
+                    torch.cuda.empty_cache()
 
             saver.save(modeldir, last_step)
 

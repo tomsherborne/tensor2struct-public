@@ -15,7 +15,7 @@ import wandb
 from tensor2struct.utils import registry, random_state, vocab
 from tensor2struct.utils import saver as saver_mod
 from tensor2struct.commands import train, meta_train
-from tensor2struct.training import maml
+from tensor2struct.training import fmaml
 
 
 @attr.s
@@ -47,8 +47,8 @@ class MetaTrainer(meta_train.MetaTrainer):
             self.logger.info(f"{len(inner_parameters)} parameters for inner update")
 
             # 1. MAML trainer, might add new parameters to the optimizer, e.g., step size
-            maml_trainer = maml.MAML(
-                model=self.model, inner_opt=inner_optimizer, device=self.device,
+            maml_trainer = fmaml.MAML(
+                model=self.model, inner_opt=inner_optimizer, device=self.device, first_order=self.train_config.first_order
             )
             maml_trainer.to(self.device)
 

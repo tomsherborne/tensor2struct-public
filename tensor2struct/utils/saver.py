@@ -44,7 +44,7 @@ def load_checkpoint(item_dict, model_dir, map_location=None, step=None):
     """ item_dict: {"model": model, "opt1": opt1, ...}"""
     path = os.path.join(model_dir, "model_checkpoint")
     if step is not None:
-        path += "-{:08d}".format(step)
+        path += "-{:08d}".format(int(step))
     if os.path.exists(path):
         print("Loading model from %s" % path)
         checkpoint = torch.load(path, map_location=map_location)
