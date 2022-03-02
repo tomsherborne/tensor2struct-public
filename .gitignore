@@ -22,3 +22,4 @@ slurm_outputs/
 
 # third_party
 third_party/mosesdecoder
+.idea/
