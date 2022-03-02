@@ -1,0 +1,17 @@
+.idea
+.git
+.vscode
+__pycache__
+.ipynb_checkpoints
+runs
+*.th
+*.ipynb
+big
+tests
+.lock
+*/.lock
+config/archived
+big/archived
+data/encodings
+log/
+wandb/

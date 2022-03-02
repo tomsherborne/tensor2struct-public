@@ -1,0 +1,16 @@
+.idea
+.git
+.vscode
+__pycache__
+.ipynb_checkpoints
+big
+tests
+.lock
+*.th
+*.th.*
+model.tar.gz
+initial.tar.gz
+configs
+data
+experiments
+model_checkpoint*
