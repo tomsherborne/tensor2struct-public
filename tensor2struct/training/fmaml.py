@@ -4,7 +4,6 @@ import torch.nn as nn
 import collections
 
 import copy
-import higher
 import logging
 
 logger = logging.getLogger("tensor2struct")
@@ -17,7 +16,7 @@ class FirstOrderModelAgnosticMetaLearning(nn.Module):
         super().__init__()
         self.inner_opt = inner_opt
         self.first_order = first_order
-        self.inner_steps = 1 # TODO: change here
+        self.inner_steps = 1
         self.device = device
 
     def get_inner_opt_params(self):
@@ -34,20 +33,16 @@ class FirstOrderModelAgnosticMetaLearning(nn.Module):
 
     def fmaml_train(self, model, inner_batch, outer_batches):
         logger.info("Using FMAML ->>")
-        # TODO: change here -- check we have k inner batches
 
         assert len(outer_batches) == 1  # support list later
 
         # state_dict won't give u the gradients
         theta_0 = copy.deepcopy(list(model.get_trainable_parameters()))
-
-        # TODO need to fix this to allow multiple LRs
         assert len(self.inner_opt.param_groups) == 1
         lr = self.inner_opt.param_groups[0]["lr"]
         assert lr > 1e-8
         # logger.info(f"inner lr: {lr}")
 
-        # TODO: change here -- we do k inner steps
         # meta train
         self.inner_opt.zero_grad()
         inner_loss = model(inner_batch)["loss"]
@@ -64,7 +59,8 @@ class FirstOrderModelAgnosticMetaLearning(nn.Module):
         # update
         theta = list(model.get_trainable_parameters())
         for param_0, param in zip(theta_0, theta):
-            # get back to theta_0
+            # get back to theta_0 (note that this is WRONG but we keep it here as Bailin's version)
+
             param.data.copy_(param_0.data)
 
             if not param.requires_grad:
@@ -73,6 +69,7 @@ class FirstOrderModelAgnosticMetaLearning(nn.Module):
                 # sum gradients
                 # NOTE that I think the LR adjustment here is bullshit. 
                 src_grad = (param_0 - param) / (lr + 1e-8) # undoing existing LR adjustment here. 
+                
                 tgt_grad = param.grad
                 if tgt_grad is not None:
                     param.grad = src_grad + tgt_grad

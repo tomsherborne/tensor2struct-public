@@ -22,6 +22,8 @@ function(args={}, data_path=_data_path) {
         max_steps: 20000,
         device: "cuda:0",
         num_batch_accumulated: 1,
+        yield_outer_batch: true,
+        do_cross_gradient_normalization: false,
 
         # matching config
         use_latent_relations: false,
@@ -49,6 +51,7 @@ function(args={}, data_path=_data_path) {
         mask_type: "l0",
         slow_parameters: null,
         data_scheduler: "mixed_db_scheduler",
+        inner_steps: 1
     },
 
     # merge args, to support this, you have to use $.args in your inherited function
@@ -57,7 +60,8 @@ function(args={}, data_path=_data_path) {
     # format model name
     local lr_s = '%0.1e' % $.args.lr,
     local end_lr_s = '0e0',
-    model_name: 'bs=%(bs)d,lr=%(lr)s,end_lr=%(end_lr)s,att=%(att)d' % ({
+    model_name: 'k=%(kk)d,bs=%(bs)d,lr=%(lr)s,end_lr=%(end_lr)s,att=%(att)d' % ({
+        kk: $.args.inner_steps,
         bs: $.args.bs,
         lr: lr_s,
         end_lr: end_lr_s,
@@ -168,7 +172,10 @@ function(args={}, data_path=_data_path) {
         eval_batch_size: $.args.bs,
         num_batch_accumulated: $.args.num_batch_accumulated,
         clip_grad: $.args.clip_grad,
-
+        inner_steps: $.args.inner_steps,
+        yield_outer_batch: $.args.yield_outer_batch,
+        do_cross_gradient_normalization: $.args.do_cross_gradient_normalization,
+        
         model_seed: $.args.att,
         data_seed:  $.args.att,
         init_seed:  $.args.att,

@@ -25,7 +25,9 @@ class MetaTrainConfig(train.TrainConfig):
     inner_opt = attr.ib(kw_only=True)
     first_order = attr.ib(kw_only=True, default=False)
     data_scheduler = attr.ib(kw_only=True)
-
+    inner_steps = attr.ib(kw_only=True, default=1)
+    yield_outer_batch = attr.ib(kw_only=True, default=True)
+    do_cross_gradient_normalization = attr.ib(kw_only=True)
 
 class MetaTrainer(train.Trainer):
     def load_train_config(self):
@@ -81,6 +83,7 @@ class MetaTrainer(train.Trainer):
                 self.train_config.data_scheduler,
                 examples=train_data,
                 max_train_step=self.train_config.max_steps,
+                yield_outer_batch=self.train_config.yield_outer_batch
             )
         return train_data_scheduler
 

@@ -1,4 +1,4 @@
-local spider_base = import "spider_base_0512.libsonnet";
+local spider_base = import "spider_base_0512REP.libsonnet";
 local _data_path = 'data/ch_spider/';
 
 function(args, data_path=_data_path) spider_base(args, data_path=_data_path) {

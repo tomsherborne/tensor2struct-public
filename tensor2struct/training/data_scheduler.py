@@ -1,3 +1,5 @@
+from copy import deepcopy
+import functools
 import random
 import collections
 import numpy as np
@@ -97,7 +99,36 @@ class DBScheduler(DataScheduler):
         else:
             self.db_list = list(self.iterators_by_db.keys())
         logger.info(f"{len(self.db_list)} dbs loaded for training")
+
+        if self.use_similarity:
+            self.sp_nlp = spacy.load("en_core_web_md")
+            self.db_similarity = self._compute_cached_sim_matrix()
+            
         self._task_generator = self._yield_tasks_by_id()
+
+    def _compute_cached_sim_matrix(self):
+        """
+        Pre-compute the similarity matrix for faster batch loading
+        """
+        if self.sp_nlp is None:
+            self.sp_nlp = spacy.load("en_core_web_md")
+        logger.info("Pre-computing the Database similarities")
+        dbs = self.db_list
+        db_sim = {}
+        for db1 in dbs:
+            other_dbs = deepcopy(self.db_list)
+            other_dbs.remove(db1)
+            db1_ = db1.replace("_", " ")
+            db1_sim = {}
+            for db2 in other_dbs:
+                db2_ = db2.replace("_", " ")
+                v1 = self.sp_nlp(db1_)
+                v2 = self.sp_nlp(db2_)
+                db1_sim[db2] = v1.similarity(v2)
+
+            db_sim[db1] = db1_sim
+
+        return db_sim
 
     def obtain_large_db(self):
         large_db_set = set()
@@ -112,14 +143,7 @@ class DBScheduler(DataScheduler):
         return large_db_set
 
     def compute_sim(self, db1, db2):
-        db1 = db1.replace("_", " ")
-        db2 = db2.replace("_", " ")
-        if self.sp_nlp is None:
-            self.sp_nlp = spacy.load("en_core_web_md")
-        v1 = self.sp_nlp(db1)
-        v2 = self.sp_nlp(db2)
-        sim = v1.similarity(v2)
-        return sim
+        return self.db_similarity[db1][db2]
 
     def _yield_tasks_by_id(self):
         id2iterators = self.iterators_by_db
@@ -134,7 +158,7 @@ class DBScheduler(DataScheduler):
             # sampled_ids = np.random.choice(self.db_list, num_batch_per_train, p=_p, replace=True)
             inner_db_id = random.sample(self.db_list, 1)[0]
             inner_task = next(id2iterators[inner_db_id])
-            other_ids = self.db_list[:]
+            other_ids = deepcopy(self.db_list)
             other_ids.remove(inner_db_id)
             if self.use_similarity:
                 cos_sims = [
@@ -188,3 +212,68 @@ class DBScheduler(DataScheduler):
 
     def get_batch(self, step=None):
         return next(self._task_generator)
+
+
+@registry.register("data_scheduler", "db_reptile_scheduler")
+class DBReptileScheduler(DBScheduler):
+    def __init__(self, 
+                 examples, 
+                 batch_size, 
+                 num_batch_per_train, 
+                 group_func=None, 
+                 use_similarity=False, 
+                 filter_large_db=True, 
+                 sampler=None,
+                 yield_outer_batch=True
+                 ):
+        super().__init__(examples, batch_size, num_batch_per_train, group_func, use_similarity, filter_large_db, sampler)
+        self.yield_outer_batch = yield_outer_batch # New argument stating whether a new outer-batch is provided
+
+    def _yield_tasks_by_id(self):
+        id2iterators = self.iterators_by_db
+        id2count = self.dbid2count
+
+        _counts = [id2count[_id] for _id in self.db_list]
+        all_count = sum(_counts)
+        _p = [_c / all_count for _c in _counts]
+
+        num_inner_batches = self.num_batch_per_train if not self.yield_outer_batch else self.num_batch_per_train - 1
+
+        while True:
+            
+            # Get num_batch_per_train inner tasks
+            # make this into a loop where you get 1 batch, 
+            # then remove from potential batches and get n-1 more
+            db_list = deepcopy(self.db_list)
+            inner_tasks = []
+            inner_dbs = []
+            for i in range(num_inner_batches):
+                inner_db_id = random.sample(db_list, 1)[0]
+                inner_task = next(id2iterators[inner_db_id])
+                inner_dbs.append(inner_db_id)
+                inner_tasks.append(inner_task)
+                db_list.remove(inner_db_id)
+
+            outer_id = "N/A"
+            outer_task = []
+            if self.yield_outer_batch:
+                other_ids = db_list # remaining DBs
+                if self.use_similarity:
+                    # cos_sims = [
+                    #     self.compute_sim(inner_db_id, _outer_id) for _outer_id in other_ids
+                    # ]
+                    # We proxy the outer similarity to the final inner task as total inner
+                    compute_simp = functools.partial(self.compute_sim, inner_db_id)
+                    cos_sim = list(map(compute_simp, other_ids))
+                    scores =  list(map(lambda x: x/self.temperature, cos_sim))
+                    p_sim = torch.softmax(torch.Tensor(scores), dim=0).numpy()
+                    outer_id = np.random.choice(
+                        other_ids, 1, p=p_sim, replace=False
+                    )
+                else:
+                    outer_id = np.random.choice(
+                        other_ids, 1, replace=False
+                    )
+                outer_task = [next(id2iterators[_db_id]) for _db_id in outer_id]
+            logger.info(f"Inner DBs: {inner_dbs}, Outer DB: {outer_id}")
+            yield inner_tasks, outer_task

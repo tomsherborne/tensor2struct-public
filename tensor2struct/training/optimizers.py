@@ -113,7 +113,7 @@ class BertAdamW(transformers.AdamW):
             "lr": bert_lr,
             "weight_decay": 0,
         }
-        self.non_bert_param_group = {"params": non_bert_params}
+        self.non_bert_param_group = {"params": non_bert_params, "weight_decay": 0}
 
         params = [self.non_bert_param_group, self.bert_param_group]
         if "name" in kwargs:
@@ -135,7 +135,7 @@ class TorchAdamW(torch.optim.AdamW):
             "lr": bert_lr,
             "weight_decay": 0,
         }
-        self.non_bert_param_group = {"params": non_bert_params}
+        self.non_bert_param_group = {"params": non_bert_params, "weight_decay": 0}
 
         params = [self.non_bert_param_group, self.bert_param_group]
 
@@ -143,6 +143,23 @@ class TorchAdamW(torch.optim.AdamW):
             kwargs = kwargs.copy()
             del kwargs["name"]
         super(TorchAdamW, self).__init__(params, lr=lr, **kwargs)
+
+
+@registry.register("optimizer", "torchSGD")
+class TorchSGD(torch.optim.SGD):
+    def __init__(self, non_bert_params, bert_params, lr=1e-3, bert_lr=2e-5, **kwargs):
+            self.bert_param_group = {
+                "params": bert_params,
+                "lr": bert_lr,
+            }
+            self.non_bert_param_group = {"params": non_bert_params}
+
+            params = [self.non_bert_param_group, self.bert_param_group]
+
+            if "name" in kwargs:
+                kwargs = kwargs.copy()
+                del kwargs["name"]
+            super(TorchSGD, self).__init__(params, lr=lr, **kwargs)
 
 
 @registry.register("lr_scheduler", "bert_warmup_polynomial_group")
